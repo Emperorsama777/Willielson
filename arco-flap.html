@@ -1,0 +1,565 @@
+﻿<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Arco Flap</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #16324f;
+      --paper: #f8fbff;
+      --panel: rgba(255, 255, 255, 0.78);
+      --sky-a: #9de7ff;
+      --sky-b: #d7f6ff;
+      --sun: #ffcc4d;
+      --accent: #ff4f8b;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      overflow: hidden;
+      background: linear-gradient(#89daf7 0%, #dff9ff 72%, #bdf2d7 100%);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+    }
+
+    .game-shell {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 18px;
+    }
+
+    .stage {
+      position: relative;
+      width: min(100%, 980px);
+      aspect-ratio: 16 / 9;
+      max-height: calc(100vh - 36px);
+      border: 2px solid rgba(22, 50, 79, 0.18);
+      border-radius: 8px;
+      overflow: hidden;
+      background: linear-gradient(180deg, var(--sky-a), var(--sky-b) 68%, #b6f0cf 68%, #8ee2a8 100%);
+      box-shadow: 0 18px 52px rgba(19, 67, 101, 0.24);
+      touch-action: manipulation;
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .hud {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    .score {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      min-width: 68px;
+      padding: 8px 12px;
+      border: 1px solid rgba(22, 50, 79, 0.16);
+      border-radius: 8px;
+      background: var(--panel);
+      backdrop-filter: blur(12px);
+      font-size: clamp(18px, 3vw, 34px);
+      font-weight: 800;
+      line-height: 1;
+      text-align: center;
+    }
+
+    .help {
+      position: absolute;
+      right: 16px;
+      top: 16px;
+      padding: 8px 12px;
+      border-radius: 8px;
+      background: var(--panel);
+      border: 1px solid rgba(22, 50, 79, 0.16);
+      backdrop-filter: blur(12px);
+      font-size: clamp(12px, 1.6vw, 15px);
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .overlay {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      pointer-events: none;
+      background: linear-gradient(rgba(255,255,255,0.0), rgba(255,255,255,0.16));
+    }
+
+    .message {
+      width: min(92%, 420px);
+      padding: 18px 18px 16px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.86);
+      border: 1px solid rgba(22, 50, 79, 0.18);
+      box-shadow: 0 16px 44px rgba(24, 80, 118, 0.2);
+      text-align: center;
+      backdrop-filter: blur(16px);
+    }
+
+    .message h1 {
+      margin: 0 0 8px;
+      font-size: clamp(26px, 5vw, 48px);
+      line-height: 0.95;
+      letter-spacing: 0;
+    }
+
+    .message p {
+      margin: 0;
+      font-size: clamp(14px, 2vw, 18px);
+      font-weight: 650;
+      line-height: 1.35;
+    }
+
+    .message .small {
+      margin-top: 10px;
+      font-size: clamp(12px, 1.6vw, 14px);
+      opacity: 0.72;
+    }
+
+    .hidden { display: none; }
+
+    @media (max-width: 720px) {
+      .game-shell { padding: 0; }
+      .stage {
+        width: 100vw;
+        height: 100vh;
+        max-height: none;
+        aspect-ratio: auto;
+        border: 0;
+        border-radius: 0;
+      }
+      .help { left: 16px; right: auto; top: auto; bottom: 16px; }
+      .score { top: 14px; left: 14px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="game-shell">
+    <section class="stage" id="stage" aria-label="Jogo Arco Flap">
+      <canvas id="game" width="1280" height="720"></canvas>
+      <div class="hud">
+        <div class="score" id="score">0</div>
+        <div class="help">Espaco, clique ou toque</div>
+        <div class="overlay" id="overlay">
+          <div class="message">
+            <h1>Arco Flap</h1>
+            <p>Desvie das pilastras coloridas e tente ir o mais longe possivel.</p>
+            <p class="small">Pressione espaco, clique ou toque para voar.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const stage = document.getElementById('stage');
+    const scoreEl = document.getElementById('score');
+    const overlay = document.getElementById('overlay');
+
+    const birdImg = new Image();
+    birdImg.src = 'Imagens/Captura_de_tela_2026-06-25_115037-removebg-preview.png';
+
+    const sunImagePath = 'Imagens/WhatsApp-Image-2026-06-25-at-14.11.00-removebg-preview.png'
+    const cloudImagePath = 'Imagens/WhatsApp-Image-2026-06-25-at-14.11.01__1_-removebg-preview.png';
+    const sunImg = loadOptionalImage(sunImagePath);
+    const cloudImg = loadOptionalImage(cloudImagePath);
+
+    const palette = ['#ff477e', '#ff9f1c', '#ffe156', '#2ec4b6', '#3a86ff', '#8338ec'];
+    const rainbowBands = ['#ff2f5f', '#ff8c1a', '#ffe24a', '#35d95f', '#20c7d9', '#3478ff', '#8a42ff'];
+    const state = {
+      mode: 'ready',
+      score: 0,
+      best: Number(localStorage.getItem('arcoFlapBest') || 0),
+      time: 0,
+      last: 0,
+      speed: 250,
+      gravity: 1750,
+      flap: -560,
+      ground: 94,
+      pipes: [],
+      sparks: [],
+      bird: { x: 220, y: 300, vy: 0, w: 70, h: 52, rot: 0 }
+    };
+
+    function loadOptionalImage(src) {
+      if (!src) return null;
+      const img = new Image();
+      img.src = src;
+      return img;
+    }
+
+    function imageReady(img) {
+      return img && img.complete && img.naturalWidth > 0;
+    }
+
+    function resizeCanvas() {
+      const rect = stage.getBoundingClientRect();
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.floor(rect.width * dpr);
+      canvas.height = Math.floor(rect.height * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      canvas.style.width = rect.width + 'px';
+      canvas.style.height = rect.height + 'px';
+    }
+
+    function reset() {
+      const h = stage.clientHeight;
+      state.mode = 'ready';
+      state.score = 0;
+      state.speed = 250;
+      state.time = 0;
+      state.last = performance.now();
+      state.pipes = [];
+      state.sparks = [];
+      state.bird.x = Math.max(105, stage.clientWidth * 0.22);
+      state.bird.y = h * 0.42;
+      state.bird.vy = 0;
+      state.bird.rot = 0;
+      scoreEl.textContent = '0';
+      overlay.classList.remove('hidden');
+      overlay.querySelector('h1').textContent = 'Arco Flap';
+      overlay.querySelector('p').textContent = 'Desvie das pilastras coloridas e tente ir o mais longe possivel.';
+      overlay.querySelector('.small').textContent = 'Pressione espaco, clique ou toque para voar.';
+      seedPipes(true);
+    }
+
+    function start() {
+      state.mode = 'play';
+      state.bird.vy = state.flap;
+      overlay.classList.add('hidden');
+      burst(state.bird.x - 8, state.bird.y + 16, '#fff36b');
+    }
+
+    function gameOver() {
+      state.mode = 'over';
+      state.best = Math.max(state.best, state.score);
+      localStorage.setItem('arcoFlapBest', String(state.best));
+      overlay.classList.remove('hidden');
+      overlay.querySelector('h1').textContent = 'Fim de jogo';
+      overlay.querySelector('p').textContent = `Pontos: ${state.score}  |  Melhor: ${state.best}`;
+      overlay.querySelector('.small').textContent = 'Pressione espaco, clique ou toque para recomecar.';
+      burst(state.bird.x, state.bird.y, '#ff477e');
+    }
+
+    function input() {
+      if (state.mode === 'ready') start();
+      else if (state.mode === 'over') { reset(); start(); }
+      else {
+        state.bird.vy = state.flap;
+        burst(state.bird.x - 18, state.bird.y + state.bird.h * 0.5, '#f7ff58');
+      }
+    }
+
+    function seedPipes(initial = false) {
+      const w = stage.clientWidth;
+      state.pipes.length = 0;
+      let x = initial ? w + 140 : w + 40;
+      for (let i = 0; i < 5; i++) {
+        state.pipes.push(makePipe(x + i * pipeSpacing()));
+      }
+    }
+
+    function pipeSpacing() {
+      return Math.max(255, stage.clientWidth * 0.28);
+    }
+
+    function makePipe(x) {
+      const h = stage.clientHeight;
+      const playable = h - state.ground;
+      const gap = Math.max(158, Math.min(225, playable * 0.29));
+      const margin = 78;
+      const center = margin + gap * 0.5 + Math.random() * (playable - gap - margin * 2);
+      const colorA = palette[Math.floor(Math.random() * palette.length)];
+      let colorB = palette[Math.floor(Math.random() * palette.length)];
+      if (colorA === colorB) colorB = palette[(palette.indexOf(colorB) + 2) % palette.length];
+      return { x, w: 82, gap, center, colorA, colorB, scored: false };
+    }
+
+    function burst(x, y, color) {
+      for (let i = 0; i < 9; i++) {
+        state.sparks.push({
+          x, y, color,
+          vx: -80 - Math.random() * 110,
+          vy: -80 + Math.random() * 160,
+          life: 0.38 + Math.random() * 0.18,
+          r: 2 + Math.random() * 3
+        });
+      }
+    }
+
+    function drawBackground(t, w, h) {
+      ctx.clearRect(0, 0, w, h);
+      drawSun(w - 112, 92, 34);
+
+      ctx.fillStyle = 'rgba(255,255,255,0.78)';
+      for (let i = 0; i < 5; i++) {
+        const cx = ((i * 270 - (t * 18) % 270) + w + 100) % (w + 270) - 120;
+        const cy = 82 + (i % 3) * 48;
+        cloud(cx, cy, 42 + (i % 2) * 14);
+      }
+
+      const groundY = h - state.ground;
+      ctx.fillStyle = '#7bdc91';
+      ctx.fillRect(0, groundY, w, state.ground);
+      ctx.fillStyle = '#55c978';
+      for (let x = -40 - (t * 120) % 64; x < w + 64; x += 64) {
+        ctx.beginPath();
+        ctx.moveTo(x, groundY + 22);
+        ctx.lineTo(x + 34, groundY + 4);
+        ctx.lineTo(x + 68, groundY + 22);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.fillStyle = '#3eaa68';
+      ctx.fillRect(0, groundY, w, 7);
+    }
+
+    function drawSun(x, y, r) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.clip();
+      if (imageReady(sunImg)) {
+        drawImageCover(sunImg, x - r, y - r, r * 2, r * 2);
+      } else {
+        ctx.fillStyle = '#ffcf5d';
+        ctx.fillRect(x - r, y - r, r * 2, r * 2);
+      }
+      ctx.restore();
+    }
+
+    function cloud(x, y, s) {
+      if (imageReady(cloudImg)) {
+        ctx.save();
+        cloudPath(x, y, s);
+        ctx.clip();
+        drawImageCover(cloudImg, x - s * 0.46, y - s * 0.66, s * 1.38, s * 1.16);
+        ctx.restore();
+      } else {
+        ctx.fillStyle = 'rgba(255,255,255,0.78)';
+        cloudPath(x, y, s);
+        ctx.fill();
+      }
+    }
+
+    function cloudPath(x, y, s) {
+      ctx.beginPath();
+      ctx.arc(x, y, s * 0.42, 0, Math.PI * 2);
+      ctx.moveTo(x + s * 0.86, y - s * 0.16);
+      ctx.arc(x + s * 0.36, y - s * 0.16, s * 0.5, 0, Math.PI * 2);
+      ctx.moveTo(x + s * 1.14, y);
+      ctx.arc(x + s * 0.76, y, s * 0.38, 0, Math.PI * 2);
+      ctx.moveTo(x + s * 0.82, y + s * 0.12);
+      ctx.arc(x + s * 0.36, y + s * 0.12, s * 0.46, 0, Math.PI * 2);
+    }
+
+    function drawImageCover(img, x, y, w, h) {
+      const scale = Math.max(w / img.naturalWidth, h / img.naturalHeight);
+      const sw = w / scale;
+      const sh = h / scale;
+      const sx = (img.naturalWidth - sw) * 0.5;
+      const sy = (img.naturalHeight - sh) * 0.5;
+      ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h);
+    }
+
+    function roundedRect(x, y, w, h, r) {
+      const rr = Math.min(r, Math.abs(w) * 0.5, Math.abs(h) * 0.5);
+      ctx.beginPath();
+      ctx.moveTo(x + rr, y);
+      ctx.arcTo(x + w, y, x + w, y + h, rr);
+      ctx.arcTo(x + w, y + h, x, y + h, rr);
+      ctx.arcTo(x, y + h, x, y, rr);
+      ctx.arcTo(x, y, x + w, y, rr);
+      ctx.closePath();
+    }
+
+    function drawPipe(pipe, h) {
+      const topH = pipe.center - pipe.gap * 0.5;
+      const bottomY = pipe.center + pipe.gap * 0.5;
+      const bottomH = h - state.ground - bottomY;
+      drawPillar(pipe.x, 0, pipe.w, topH, pipe.colorA, pipe.colorB, true);
+      drawPillar(pipe.x, bottomY, pipe.w, bottomH, pipe.colorB, pipe.colorA, false);
+    }
+
+    function drawPillar(x, y, w, h, c1, c2, inverted) {
+      if (h <= 0) return;
+      roundedRect(x, y, w, h, 8);
+      ctx.save();
+      ctx.clip();
+      const bandH = 24;
+      const offset = inverted ? rainbowBands.length - 1 : 0;
+      for (let yy = y - (y % bandH); yy < y + h + bandH; yy += bandH) {
+        const bandIndex = Math.abs(Math.floor(yy / bandH) + offset) % rainbowBands.length;
+        ctx.fillStyle = rainbowBands[bandIndex];
+        ctx.fillRect(x, yy, w, bandH);
+      }
+      ctx.globalAlpha = 0.18;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(x + 10, y, Math.max(6, w * 0.18), h);
+      ctx.fillStyle = '#16324f';
+      ctx.fillRect(x + w - 12, y, 7, h);
+      ctx.globalAlpha = 1;
+      ctx.restore();
+      roundedRect(x, y, w, h, 8);
+      ctx.strokeStyle = 'rgba(22,50,79,0.18)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      const capH = Math.min(30, Math.max(18, h * 0.18));
+      const capY = inverted ? y + h - capH : y;
+      ctx.fillStyle = 'rgba(255,255,255,0.28)';
+      roundedRect(x - 9, capY, w + 18, capH, 8);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(22,50,79,0.16)';
+      ctx.stroke();
+
+      ctx.globalAlpha = 0.24;
+      ctx.fillStyle = '#ffffff';
+      for (let yy = y + 18; yy < y + h; yy += 42) {
+        ctx.fillRect(x + 12, yy, w - 24, 6);
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    function drawBird() {
+      const b = state.bird;
+      ctx.save();
+      ctx.translate(b.x + b.w * 0.5, b.y + b.h * 0.5);
+      ctx.rotate(b.rot);
+      if (birdImg.complete && birdImg.naturalWidth > 0) {
+        ctx.drawImage(birdImg, -b.w * 0.5, -b.h * 0.5, b.w, b.h);
+      } else {
+        ctx.fillStyle = '#ff4f8b';
+        ctx.beginPath();
+        ctx.ellipse(0, 0, b.w * 0.42, b.h * 0.42, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function drawSparks(dt) {
+      for (let i = state.sparks.length - 1; i >= 0; i--) {
+        const s = state.sparks[i];
+        s.life -= dt;
+        s.x += s.vx * dt;
+        s.y += s.vy * dt;
+        s.vy += 250 * dt;
+        if (s.life <= 0) {
+          state.sparks.splice(i, 1);
+          continue;
+        }
+        ctx.globalAlpha = Math.max(0, Math.min(1, s.life * 2.4));
+        ctx.fillStyle = s.color;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    function update(dt) {
+      const w = stage.clientWidth;
+      const h = stage.clientHeight;
+      const b = state.bird;
+      state.time += dt;
+
+      if (state.mode === 'ready') {
+        b.y = h * 0.42 + Math.sin(state.time * 4) * 12;
+        b.rot = Math.sin(state.time * 4) * 0.08;
+      }
+
+      if (state.mode === 'play') {
+        state.speed += dt * 4.5;
+        b.vy += state.gravity * dt;
+        b.y += b.vy * dt;
+        b.rot = Math.max(-0.5, Math.min(0.9, b.vy / 820));
+
+        for (const pipe of state.pipes) {
+          pipe.x -= state.speed * dt;
+          if (!pipe.scored && pipe.x + pipe.w < b.x) {
+            pipe.scored = true;
+            state.score++;
+            scoreEl.textContent = String(state.score);
+            burst(b.x, b.y + 10, pipe.colorA);
+          }
+        }
+
+        const lastPipe = state.pipes[state.pipes.length - 1];
+        if (lastPipe && lastPipe.x < w - pipeSpacing()) {
+          state.pipes.push(makePipe(w + 70));
+        }
+        while (state.pipes[0] && state.pipes[0].x + state.pipes[0].w < -40) {
+          state.pipes.shift();
+        }
+
+        if (b.y < -22 || b.y + b.h > h - state.ground + 4 || hitPipe()) {
+          gameOver();
+        }
+      }
+    }
+
+    function hitPipe() {
+      const b = state.bird;
+      const pad = 10;
+      const bx = b.x + pad;
+      const by = b.y + pad;
+      const bw = b.w - pad * 2;
+      const bh = b.h - pad * 2;
+      for (const p of state.pipes) {
+        const overlapsX = bx < p.x + p.w && bx + bw > p.x;
+        if (!overlapsX) continue;
+        const gapTop = p.center - p.gap * 0.5;
+        const gapBottom = p.center + p.gap * 0.5;
+        if (by < gapTop || by + bh > gapBottom) return true;
+      }
+      return false;
+    }
+
+    function render(dt) {
+      const w = stage.clientWidth;
+      const h = stage.clientHeight;
+      drawBackground(state.time, w, h);
+      for (const pipe of state.pipes) drawPipe(pipe, h);
+      drawSparks(dt);
+      drawBird();
+    }
+
+    function loop(now) {
+      const dt = Math.min(0.033, (now - state.last) / 1000 || 0);
+      state.last = now;
+      update(dt);
+      render(dt);
+      requestAnimationFrame(loop);
+    }
+
+    window.addEventListener('resize', () => { resizeCanvas(); reset(); });
+    window.addEventListener('keydown', (event) => {
+      if (event.code === 'Space' || event.code === 'ArrowUp') {
+        event.preventDefault();
+        input();
+      }
+    });
+    stage.addEventListener('pointerdown', input);
+
+    resizeCanvas();
+    reset();
+    requestAnimationFrame((now) => { state.last = now; loop(now); });
+  </script>
+</body>
+</html>
